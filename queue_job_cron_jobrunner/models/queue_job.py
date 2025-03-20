@@ -4,7 +4,7 @@
 
 import logging
 import traceback
-from datetime import datetime
+from datetime import datetime, timedelta
 from io import StringIO
 
 import psutil
@@ -13,6 +13,7 @@ from psycopg2 import OperationalError
 from odoo import _, api, fields, models, tools
 from odoo.service.model import PG_CONCURRENCY_ERRORS_TO_RETRY
 
+from odoo.addons.base.models.ir_cron import _intervalTypes
 from odoo.addons.queue_job.controllers.main import PG_RETRY
 from odoo.addons.queue_job.exception import (
     FailedJobError,
@@ -164,17 +165,69 @@ class QueueJob(models.Model):
         """Short-lived job runner, triggered by async crons"""
         self._release_started_jobs(commit=commit)
         job = self._acquire_one_job(commit=commit)
+
         while job:
             job._process(commit=commit)
+
+            if self._stop_processing():
+                _logger.info(
+                    "Stop processing queue jobs in this "
+                    "ir.cron call, waiting next ir.cron call.",
+                )
+                return
+
             job = self._acquire_one_job(commit=commit)
-            # TODO: If limit_time_real_cron is reached before all the jobs are done,
-            #       the worker will be killed abruptly.
-            #       Ideally, find a way to know if we're close to reaching this limit,
-            #       stop processing, and trigger a new execution to continue.
-            #
-            # if job and limit_time_real_cron_reached_or_about_to_reach:
-            #     self._cron_trigger()
-            #     break
+
+    @api.model
+    def _stop_processing(self):
+        """compute what ever the next ir.cron call is going to be
+        trigger, if yes we stop processing queue job here
+
+        One of the goal is to mitigate that, when you have a long list of queue
+        job to process, the cron thread can be killed
+        by odoo.sh or odoo with the limit_time_real_cron limit.
+
+        We suggest to set ir cron interval lower to the limit_time_real_cron.
+        """
+        # In the current cursor (nor a new cursor) we can't see fresh nextcall which:
+        # is committed by Odoo at the end of the cron so we assume all crons are running
+        # so nextcall is the current started date
+        next_calls = [
+            cron.nextcall + _intervalTypes[cron.interval_type](cron.interval_number)
+            for cron in self.env["ir.cron"]
+            .sudo()
+            .search([("queue_job_runner", "=", True)])
+        ]
+        if not next_calls:
+            _logger.info("Stopping queue job processing, no nextcall found.")
+            return True
+
+        next_cron_job_runner_trigger_date = min(next_calls)
+
+        stop_processing_threshold_seconds = int(
+            self.env["ir.config_parameter"]
+            .sudo()
+            .get_param(
+                "queue_job_cron_jobrunner.stop_processing_threshold_seconds",
+                "0",
+            )
+        )
+        end_process_queue_job_date = next_cron_job_runner_trigger_date - timedelta(
+            seconds=stop_processing_threshold_seconds
+        )
+        now = fields.Datetime.now()
+        _logger.debug(
+            "now: %s - estimated cron nextcall: %s - "
+            "Threshold: %ss"
+            "stop processing new job after %s",
+            now,
+            next_cron_job_runner_trigger_date,
+            stop_processing_threshold_seconds,
+            end_process_queue_job_date,
+        )
+        if now >= end_process_queue_job_date:
+            return True
+        return False
 
     @api.model
     def _cron_trigger(self, at=None):

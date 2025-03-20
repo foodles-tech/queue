@@ -2,7 +2,7 @@
 # @author Iván Todorovich <ivan.todorovich@camptocamp.com>
 # License AGPL-3.0 or later (https://www.gnu.org/licenses/agpl).
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from unittest import mock
 
 from freezegun import freeze_time
@@ -37,11 +37,57 @@ class TestQueueJob(TransactionCase):
         job3 = self.env["res.partner"].with_delay(eta=3600).create({"name": "Test"})
         job3_record = job3.db_record()
         # Run the job processing cron
+        self.cron.nextcall = datetime.now() + timedelta(seconds=600)
         self.env["queue.job"]._job_runner(commit=False)
         # Check that the jobs were processed
         self.assertEqual(job1_record.state, "done", "Processed OK")
         self.assertEqual(job2_record.state, "failed", "Has errors")
         self.assertEqual(job3_record.state, "pending", "Still pending, because of eta")
+
+    def test_stop_processing_job(self):
+        # nextcall is the theorical start time of the current cron
+        self.cron.nextcall = datetime(2022, 2, 22, 22, 20, 22)
+        self.cron.interval_number = 2
+        self.cron.interval_type = "minutes"
+        self.env["ir.config_parameter"].set_param(
+            "queue_job_cron_jobrunner.stop_processing_threshold_seconds", "60"
+        )
+        job1 = self.env["res.partner"].with_delay().create({"name": "test"})
+        job1_record = job1.db_record()
+        job2 = self.env["res.partner"].with_delay().create({"name": "Test"})
+        job2_record = job2.db_record()
+        with freeze_time("2022-02-22 22:21:23"):
+            # theorical nextcall is 2022-02-22 22:20:22 + 2' => 22:22:22
+            # no queue job should be started after 22:22:22 - 60" => 22:21:22
+            self.env["queue.job"]._job_runner(commit=False)
+        self.assertEqual(job1_record.state, "done", "Processed OK")
+        self.assertEqual(job2_record.state, "pending", "no time left to start it")
+
+    def test_stop_processing_multiple_jobs(self):
+        cron2 = self.cron.copy()
+        # why not negative thersholds meaning we stop after time
+        # is already over for the nextcall
+        self.env["ir.config_parameter"].set_param(
+            "queue_job_cron_jobrunner.stop_processing_threshold_seconds", "-10"
+        )
+
+        self.cron.nextcall = datetime(2022, 2, 22, 22, 22, 22)
+        self.cron.interval_number = 2
+        self.cron.interval_type = "minutes"
+
+        cron2.nextcall = datetime(2022, 2, 22, 22, 21, 22)
+        cron2.interval_number = 2
+        cron2.interval_type = "minutes"
+
+        # cron1 not after 22:24:32
+        # cron2 not after 22:23:32
+
+        with freeze_time("2022-02-22 22:23:32"):
+            self.assertTrue(self.env["queue.job"]._stop_processing())
+
+    def test_stop_processing_inactive_cron_stop_processing(self):
+        self.cron.active = False
+        self.assertTrue(self.env["queue.job"]._stop_processing())
 
     @freeze_time("2022-02-22 22:22:22")
     def test_queue_job_cron_trigger_enqueue_dependencies(self):
@@ -53,6 +99,7 @@ class TestQueueJob(TransactionCase):
         job_record = delayable._generated_job.db_record()
         job_record_depends = delayable2._generated_job.db_record()
 
+        self.cron.nextcall = datetime(2022, 2, 22, 23, 23, 23)
         self.env["queue.job"]._job_runner(commit=False)
 
         self.assertEqual(job_record.state, "done", "Processed OK")

@@ -78,13 +78,6 @@ Parallel execution of jobs can be achieved by leveraging multiple ``ir.cron`` re
 * Duplicate the ``queue_job_cron`` cron record as many times as needed, until you have
   as much records as cron workers.
 
-Known issues / Roadmap
-======================
-
-* Support channel capacity and priority. (See ``_acquire_one_job``)
-* Gracefully handle CronWorker CPU timeouts. (See ``_job_runner``)
-* Commit transaction after job state updated to started. (See ``_process``)
-
 Bug Tracker
 ===========
 
