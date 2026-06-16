@@ -9,11 +9,12 @@ class QueueJob(models.Model):
 
     job_batch_id = fields.Many2one("queue.job.batch")
 
-    @api.model
+    @api.model_create_multi
     def create(self, vals):
         batch = self.env.context.get("job_batch")
         if batch and isinstance(batch, models.Model) and batch.state == "draft":
-            vals.update({"job_batch_id": batch.id})
+            for val in vals:
+                val.update({"job_batch_id": batch.id})
         return super().create(vals)
 
     def write(self, vals):
