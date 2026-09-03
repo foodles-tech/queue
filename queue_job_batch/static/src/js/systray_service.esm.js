@@ -59,7 +59,14 @@ class QueueJobBatchMenu extends Component {
         }
     }
 
-    async onClickBatch(batch) {
+    _batchFromEvent(ev) {
+        const batchId = parseInt(ev.currentTarget.closest("[data-batch-id]").dataset.batchId);
+        return this.state.batches.find((b) => b.id === batchId);
+    }
+
+    async onClickBatch(ev) {
+        const batch = this._batchFromEvent(ev);
+        if (!batch) return;
         this.state.isOpen = false;
         this.state.batches = this.state.batches.filter((b) => b.id !== batch.id);
         await this.orm.call("queue.job.batch", "set_read", [batch.id]);
@@ -72,7 +79,9 @@ class QueueJobBatchMenu extends Component {
         });
     }
 
-    async onHideBatch(batch) {
+    async onHideBatch(ev) {
+        const batch = this._batchFromEvent(ev);
+        if (!batch) return;
         this.state.batches = this.state.batches.filter((b) => b.id !== batch.id);
         await this.orm.call("queue.job.batch", "set_read", [batch.id]);
     }
