@@ -24,7 +24,10 @@
                 role="menu"
             >
                 <div class="border-bottom d-flex flex-shrink-0" t-if="counter > 0">
-                    <button class="o-desktop btn btn-link o-active fw-bolder" type="button">
+                    <button
+                        class="o-desktop btn btn-link o-active fw-bolder"
+                        type="button"
+                    >
                         Job Batches
                     </button>
                     <div class="flex-grow-1" />
@@ -52,7 +55,10 @@
                                 class="fa fa-list fa-3x o_job_queue_finished"
                                 t-elif="batch.finished_job_count == batch.job_count"
                             />
-                            <span class="fa fa-list fa-3x o_job_queue_progress" t-else="" />
+                            <span
+                                class="fa fa-list fa-3x o_job_queue_progress"
+                                t-else=""
+                            />
                         </div>
                         <div class="col-8" t-on-click="onClickBatch">
                             <strong
