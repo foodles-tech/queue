@@ -1,8 +1,8 @@
 /** @odoo-module **/
 
-import { Component, useState, onMounted, onWillUnmount, useRef } from "@odoo/owl";
-import { useService } from "@web/core/utils/hooks";
-import { registry } from "@web/core/registry";
+import {Component, onMounted, onWillUnmount, useRef, useState} from "@odoo/owl";
+import {useService} from "@web/core/utils/hooks";
+import {registry} from "@web/core/registry";
 
 class QueueJobBatchMenu extends Component {
     static template = "queue_job_batch.QueueJobBatchMenuView";
@@ -12,7 +12,7 @@ class QueueJobBatchMenu extends Component {
         this.action = useService("action");
         this.user = useService("user");
         this.rootRef = useRef("root");
-        this.state = useState({ isOpen: false, batches: [] });
+        this.state = useState({isOpen: false, batches: []});
 
         this._onClickCaptureGlobal = this._onClickCaptureGlobal.bind(this);
 
@@ -60,7 +60,9 @@ class QueueJobBatchMenu extends Component {
     }
 
     _batchFromEvent(ev) {
-        const batchId = parseInt(ev.currentTarget.closest("[data-batch-id]").dataset.batchId);
+        const batchId = parseInt(
+            ev.currentTarget.closest("[data-batch-id]").dataset.batchId
+        );
         return this.state.batches.find((b) => b.id === batchId);
     }
 
@@ -102,14 +104,14 @@ class QueueJobBatchMenu extends Component {
 
 const systrayService = {
     dependencies: ["user"],
-    start(_env, { user }) {
-        if (user.hasGroup("queue_job_batch.group_queue_job_batch_user")) {
+    async start(_env, {user}) {
+        if (await user.hasGroup("queue_job_batch.group_queue_job_batch_user")) {
             registry
                 .category("systray")
                 .add(
                     "queue_job_batch.QueueJobBatchMenu",
-                    { Component: QueueJobBatchMenu },
-                    { sequence: 99 }
+                    {Component: QueueJobBatchMenu},
+                    {sequence: 99}
                 );
         }
     },
